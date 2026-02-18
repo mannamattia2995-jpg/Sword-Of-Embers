@@ -1,0 +1,131 @@
+using BepInEx;
+using Jotunn;
+using Jotunn.Managers;
+using UnityEngine;
+
+namespace EmberSurtlingMod
+{
+    [BepInPlugin(ModGUID, ModName, ModVersion)]
+    [BepInDependency(Jotunn.Main.ModGuid)]
+    public class EmberSurtling : BaseUnityPlugin
+    {
+        public const string ModGUID = "com.mattiamanna.infernalembersurtling";
+        public const string ModName = "Infernal Ember Surtling";
+        public const string ModVersion = "2.0.0";
+
+        private void Awake()
+        {
+            PrefabManager.OnVanillaPrefabsAvailable += AddEmberSurtling;
+        }
+
+        private void AddEmberSurtling()
+        {
+            GameObject surtling = PrefabManager.Instance.GetPrefab("Surtling");
+            GameObject ember = Instantiate(surtling);
+            ember.name = "InfernalEmberSurtling";
+
+            Character character = ember.GetComponent<Character>();
+            character.m_health *= 2.2f; // +120% HP
+
+            // AI speed boost
+            BaseAI ai = ember.GetComponent<BaseAI>();
+            ai.m_speed *= 1.35f;
+            ai.m_alertedSpeed *= 1.35f;
+
+            // Danno raddoppiato
+            Humanoid humanoid = ember.GetComponent<Humanoid>();
+            foreach (var item in humanoid.m_defaultItems)
+            {
+                if (item != null)
+                {
+                    var drop = item.GetComponent<ItemDrop>();
+                    drop.m_itemData.m_shared.m_damages.m_fire *= 2f;
+                }
+            }
+
+            // Aura fuoco costante
+            ember.AddComponent<FireAura>();
+
+            // Esplosione alla morte
+            ember.AddComponent<DeathExplosion>();
+
+            // Rage Mode
+            ember.AddComponent<RageMode>();
+
+            PrefabManager.Instance.AddPrefab(ember);
+        }
+    }
+
+    public class FireAura : MonoBehaviour
+    {
+        private float tickTimer;
+
+        void Update()
+        {
+            tickTimer += Time.deltaTime;
+            if (tickTimer >= 1f)
+            {
+                tickTimer = 0f;
+                Collider[] hits = Physics.OverlapSphere(transform.position, 4f);
+
+                foreach (var hit in hits)
+                {
+                    Character c = hit.GetComponent<Character>();
+                    if (c != null && c.IsPlayer())
+                    {
+                        HitData damage = new HitData();
+                        damage.m_damage.m_fire = 20f;
+                        c.Damage(damage);
+                    }
+                }
+            }
+        }
+    }
+
+    public class DeathExplosion : MonoBehaviour
+    {
+        void OnDestroy()
+        {
+            var vfx = PrefabManager.Instance.GetPrefab("vfx_aoe_fire");
+            Instantiate(vfx, transform.position, Quaternion.identity);
+
+            Collider[] hits = Physics.OverlapSphere(transform.position, 6f);
+
+            foreach (var hit in hits)
+            {
+                Character c = hit.GetComponent<Character>();
+                if (c != null && c.IsPlayer())
+                {
+                    HitData damage = new HitData();
+                    damage.m_damage.m_fire = 60f;
+                    c.Damage(damage);
+                }
+            }
+        }
+    }
+
+    public class RageMode : MonoBehaviour
+    {
+        private Character character;
+        private bool enraged = false;
+
+        void Start()
+        {
+            character = GetComponent<Character>();
+        }
+
+        void Update()
+        {
+            if (!enraged && character.GetHealth() < character.GetMaxHealth() * 0.4f)
+            {
+                enraged = true;
+
+                BaseAI ai = GetComponent<BaseAI>();
+                ai.m_speed *= 1.5f;
+
+                Renderer renderer = GetComponentInChildren<Renderer>();
+                renderer.material.SetColor("_EmissionColor", Color.red * 8f);
+            }
+        }
+    }
+}
