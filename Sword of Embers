@@ -1,0 +1,126 @@
+using BepInEx;
+using Jotunn;
+using Jotunn.Configs;
+using Jotunn.Entities;
+using Jotunn.Managers;
+using UnityEngine;
+
+namespace SwordOfEmbersMod
+{
+    [BepInPlugin(ModGUID, ModName, ModVersion)]
+    [BepInDependency(Jotunn.Main.ModGuid)]
+    public class SwordOfEmbers : BaseUnityPlugin
+    {
+        public const string ModGUID = "com.mattiamanna.swordofembers";
+        public const string ModName = "Sword Of Embers";
+        public const string ModVersion = "2.0.0";
+
+        private static CustomItem emberSword;
+
+        private void Awake()
+        {
+            CreateSword();
+        }
+
+        private void CreateSword()
+        {
+            ItemConfig config = new ItemConfig();
+            config.Name = "Sword of Embers";
+            config.Description = "A legendary blade burning with eternal fury.";
+            config.CraftingStation = "forge";
+            config.MinStationLevel = 2;
+
+            config.Requirements.Add(new RequirementConfig("Iron", 20, 10));
+            config.Requirements.Add(new RequirementConfig("SurtlingCore", 5, 2));
+            config.Requirements.Add(new RequirementConfig("Coal", 10, 5));
+
+            config.MaxQuality = 4;
+
+            emberSword = new CustomItem("SwordOfEmbers", "SwordIron", config);
+
+            var shared = emberSword.ItemDrop.m_itemData.m_shared;
+
+            shared.m_animationState = ItemDrop.ItemData.AnimationState.TwoHanded;
+            shared.m_itemType = ItemDrop.ItemData.ItemType.TwoHandedWeapon;
+
+            shared.m_damages.m_slash = 75f;
+            shared.m_damagesPerLevel.m_slash = 10f;
+
+            shared.m_damages.m_fire = 40f;
+            shared.m_damagesPerLevel.m_fire = 8f;
+
+            shared.m_durability = 400f;
+            shared.m_durabilityPerLevel = 50f;
+
+            shared.m_weight = 2.5f;
+
+            shared.m_backstabBonus = 4f; // Critico speciale
+
+            AddVisualEffects(emberSword.ItemDrop.gameObject);
+
+            ItemManager.Instance.AddItem(emberSword);
+        }
+
+        private void AddVisualEffects(GameObject item)
+        {
+            AddFireAura(item);
+            AddAttackTrail(item);
+        }
+
+        private void AddFireAura(GameObject item)
+        {
+            var fireVFX = PrefabManager.Instance.GetPrefab("vfx_SurtlingFire");
+            if (fireVFX != null)
+            {
+                Instantiate(fireVFX, item.transform);
+            }
+
+            var renderer = item.GetComponentInChildren<Renderer>();
+            if (renderer != null)
+            {
+                renderer.material.EnableKeyword("_EMISSION");
+                renderer.material.SetColor("_EmissionColor", Color.red * 3f);
+            }
+        }
+
+        private void AddAttackTrail(GameObject item)
+        {
+            var trail = item.AddComponent<TrailRenderer>();
+            trail.time = 0.3f;
+            trail.startWidth = 0.4f;
+            trail.endWidth = 0.1f;
+            trail.material = new Material(Shader.Find("Sprites/Default"));
+            trail.startColor = Color.red;
+            trail.endColor = new Color(1f, 0f, 0f, 0f);
+        }
+    }
+
+    public class EmberExplosion : MonoBehaviour
+    {
+        private void OnCollisionEnter(Collision collision)
+        {
+            var explosion = PrefabManager.Instance.GetPrefab("vfx_aoe_fire");
+            if (explosion != null)
+            {
+                Instantiate(explosion, transform.position, Quaternion.identity);
+            }
+
+            Collider[] hitColliders = Physics.OverlapSphere(transform.position, 4f);
+
+            foreach (var hit in hitColliders)
+            {
+                var character = hit.GetComponent<Character>();
+                if (character != null && !character.IsPlayer())
+                {
+                    character.Damage(new HitData
+                    {
+                        m_damage = new HitData.DamageTypes
+                        {
+                            m_fire = 50f
+                        }
+                    });
+                }
+            }
+        }
+    }
+}
